@@ -1,17 +1,18 @@
 package niu.edu.b0943034;
 
 import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
 import com.google.gson.reflect.TypeToken;
 
 import java.awt.*;
 import java.awt.event.*;
 import java.io.*;
+import java.lang.reflect.Type;
 import java.net.*;
 import java.util.*;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import javax.swing.JPanel;
+import javax.swing.*;
 import javax.swing.Timer;
 
 public class GamePanel extends JPanel implements ActionListener, MouseListener {
@@ -23,7 +24,7 @@ public class GamePanel extends JPanel implements ActionListener, MouseListener {
 
     private static final int SCREEN_WIDTH = 800;
     private static final int SCREEN_HEIGHT = 800;
-    private static final int UNIT_SIZE = 15;
+    private static final int UNIT_SIZE = 16;
     private static final int GAME_UNITS = (SCREEN_WIDTH * SCREEN_HEIGHT) / UNIT_SIZE;
     private static final int DELAY = 55;
 
@@ -33,12 +34,10 @@ public class GamePanel extends JPanel implements ActionListener, MouseListener {
     private int applesEaten = 0;
     private String appleString;
     private String receivedMessage;
-
-    private HashMap<String, Integer> scores = new HashMap<>();
+    private List<Player> playerList = new ArrayList<>();
 
     private int appleX;
     private int appleY;
-
     private char direction = 'R';
     private boolean running = false;
     private boolean started = false;
@@ -46,6 +45,7 @@ public class GamePanel extends JPanel implements ActionListener, MouseListener {
     private boolean gameOver = false;
     private Timer timer = new Timer(DELAY, this);
     private Random random;
+    private String name = "";
 
     public GamePanel(String host, int port) {
         random = new Random();
@@ -55,6 +55,12 @@ public class GamePanel extends JPanel implements ActionListener, MouseListener {
         this.addKeyListener(new MyKeyAdapter());
         this.addMouseListener(this);
         client(host, port);
+
+        // 新增輸入介面
+        while (name.isEmpty()) {
+            name = JOptionPane.showInputDialog(null, "請輸入遊戲 ID：");
+        }
+
         startGame();
     }
 
@@ -78,8 +84,8 @@ public class GamePanel extends JPanel implements ActionListener, MouseListener {
             try {
                 while (true) {
                     receivedMessage = fromServer.readUTF();
-                    topdata(receivedMessage);
                     System.out.println(receivedMessage);
+                    topdata(receivedMessage);
                 }
             } catch (IOException e) {
                 e.printStackTrace();
@@ -194,7 +200,10 @@ public class GamePanel extends JPanel implements ActionListener, MouseListener {
                 bodyParts++;
                 applesEaten++;
                 appleString = String.valueOf(applesEaten);
-                toServer.writeUTF(appleString);
+                Player player = new Player(name, clientSocket.getLocalPort(), applesEaten, true);
+                Gson gson = new Gson();
+                String json = gson.toJson(player);
+                toServer.writeUTF(json);
                 newApple();
             } catch (IOException e) {
                 e.printStackTrace();
@@ -225,10 +234,11 @@ public class GamePanel extends JPanel implements ActionListener, MouseListener {
     }
 
     public void topdata(String receivedMessage) {
-        String[] play_data = receivedMessage.split(":");
-        scores.put(play_data[0], Integer.parseInt(play_data[1]));
-
+        Gson gson = new Gson();
+        Type type = new TypeToken<List<Player>>(){}.getType();
+        playerList = gson.fromJson(receivedMessage, type);
     }
+
 
     public void draw(Graphics g) {
 
@@ -257,9 +267,8 @@ public class GamePanel extends JPanel implements ActionListener, MouseListener {
             g.setFont(new Font("Ink Free", Font.BOLD, 30));
             FontMetrics metrics = getFontMetrics(g.getFont());
             int text_y = 0;
-            for (String name : scores.keySet()) {
-                int score = scores.get(name);
-                g.drawString(name + score, (SCREEN_WIDTH - metrics.stringWidth(name + score)) / 2,
+            for (Player player : playerList) {
+                g.drawString(player.getName() + ":" + player.getPort() + " " + player.getScore(), (SCREEN_WIDTH - metrics.stringWidth(player.getName() + player.getScore())) / 2,
                         g.getFont().getSize() + text_y * 50);
                 text_y += 1;
             }
@@ -290,7 +299,7 @@ public class GamePanel extends JPanel implements ActionListener, MouseListener {
         g.setFont(new Font("SAN_SERIF", Font.BOLD, 45));
         FontMetrics metrics2 = getFontMetrics(g.getFont());
         g.drawString("按下 Enter 重新開始遊戲...",
-                (SCREEN_WIDTH - metrics2.stringWidth("按下 Enter 重新開始遊戲....")) / 2, (SCREEN_HEIGHT / 2) + 100);
+                (SCREEN_WIDTH - metrics2.stringWidth("按下 Enter 重新開始遊戲....")) / 2, (SCREEN_HEIGHT / 2) + 125);
 
         gameOver = true;
     }
@@ -304,7 +313,7 @@ public class GamePanel extends JPanel implements ActionListener, MouseListener {
         applesEaten = 0;
         appleString = "";
         receivedMessage = "";
-        scores.clear();
+        playerList.clear();
         direction = 'R';
         timer.stop();
         random = new Random();
