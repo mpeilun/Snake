@@ -15,7 +15,7 @@ import java.util.concurrent.Executors;
 import javax.swing.*;
 import javax.swing.Timer;
 
-public class GamePanel extends JPanel implements ActionListener, MouseListener {
+public class GamePanel extends JPanel implements ActionListener {
 
     private ExecutorService exec;
     private Socket clientSocket;
@@ -43,7 +43,7 @@ public class GamePanel extends JPanel implements ActionListener, MouseListener {
     private boolean gameOver = false;
     private Timer timer = new Timer(DELAY, this);
     private Random random;
-    private String name = "";
+    private Player player;
 
     public GamePanel(String host, int port) {
         random = new Random();
@@ -51,13 +51,14 @@ public class GamePanel extends JPanel implements ActionListener, MouseListener {
         this.setBackground(Color.BLACK);
         this.setFocusable(true);
         this.addKeyListener(new MyKeyAdapter());
-        this.addMouseListener(this);
         client(host, port);
 
-        // 新增輸入介面
-        while (name.isEmpty()) {
-            name = JOptionPane.showInputDialog(null, "請輸入遊戲 ID：");
+        String inputName = "";
+        while (inputName.isEmpty()) {
+            inputName = JOptionPane.showInputDialog(null, "請輸入遊戲 ID：");
         }
+
+        player = new Player(inputName, clientSocket.getLocalPort(), applesEaten, true);
 
         startGame();
     }
@@ -103,7 +104,7 @@ public class GamePanel extends JPanel implements ActionListener, MouseListener {
         if (started && paused) {
             return;
         }
-        Player player = new Player(name, clientSocket.getLocalPort(), applesEaten, true);
+        player.setScore(applesEaten);
         sendMessage(player);
         newApple();
         running = true;
@@ -161,7 +162,7 @@ public class GamePanel extends JPanel implements ActionListener, MouseListener {
                     }
                     break;
                 case KeyEvent.VK_ENTER:
-                    if(!started) {
+                    if (!started) {
                         started = true;
                         startGame();
                     } else if (gameOver) {
@@ -198,7 +199,7 @@ public class GamePanel extends JPanel implements ActionListener, MouseListener {
         if ((x[0] == appleX) && (y[0] == appleY)) {
             bodyParts++;
             applesEaten++;
-            Player player = new Player(name, clientSocket.getLocalPort(), applesEaten, true);
+            player.setScore(applesEaten);
             sendMessage(player);
             newApple();
         }
@@ -227,7 +228,8 @@ public class GamePanel extends JPanel implements ActionListener, MouseListener {
 
     public void topdata(String receivedMessage) {
         Gson gson = new Gson();
-        Type type = new TypeToken<List<Player>>(){}.getType();
+        Type type = new TypeToken<List<Player>>() {
+        }.getType();
         playerList = gson.fromJson(receivedMessage, type);
     }
 
@@ -245,14 +247,18 @@ public class GamePanel extends JPanel implements ActionListener, MouseListener {
     public void draw(Graphics g) {
 
         if (!started) {
-            g.setColor(Color.RED);
-            g.setFont(new Font("SAN_SERIF", Font.BOLD, 30));
+            g.setColor(Color.WHITE);
+            g.setFont(new Font("Monospaced", Font.BOLD, 30));
             FontMetrics metrics = getFontMetrics(g.getFont());
+            g.drawString("[ID] " + player.getName() + ":" + player.getPort(), (SCREEN_WIDTH - metrics.stringWidth("[Enter] => 開始遊戲")) / 2,
+                    SCREEN_HEIGHT / 2 - 16);
+            g.setColor(Color.RED);
             g.drawString("[Enter] => 開始遊戲", (SCREEN_WIDTH - metrics.stringWidth("[Enter] => 開始遊戲")) / 2,
-                    SCREEN_HEIGHT / 2);
+                    SCREEN_HEIGHT / 2 + 32);
             g.drawString("[Space] => 暫停遊戲", (SCREEN_WIDTH - metrics.stringWidth("[Space] => 暫停遊戲")) / 2,
-                    (SCREEN_HEIGHT / 2) + 50);
+                    (SCREEN_HEIGHT / 2) + 64);
         } else if (running) {
+            // 繪畫蛇本體
             g.setColor(Color.RED);
             g.fillOval(appleX, appleY, UNIT_SIZE, UNIT_SIZE);
 
@@ -264,19 +270,44 @@ public class GamePanel extends JPanel implements ActionListener, MouseListener {
                 }
                 g.fillRect(x[i], y[i], UNIT_SIZE, UNIT_SIZE);
             }
-            // Score text
-            g.setColor(Color.CYAN);
-            g.setFont(new Font("Ink Free", Font.BOLD, 30));
-            FontMetrics metrics = getFontMetrics(g.getFont());
+
+            // 繪製在線玩家清單
             int text_y = 0;
-            for (Player player : playerList) {
-                g.drawString(player.getName() + ":" + player.getPort() + " " + player.getScore(), (SCREEN_WIDTH - metrics.stringWidth(player.getName() + player.getScore())) / 2,
-                        g.getFont().getSize() + text_y * 50);
-                text_y += 1;
+            int x_pos = 10;
+
+            g.setColor(Color.WHITE);
+            g.setFont(new Font("Monospaced", Font.BOLD, 26));
+            FontMetrics metrics = getFontMetrics(g.getFont());
+            g.drawString("↳在線玩家", x_pos, g.getFont().getSize());
+            text_y += 1;
+
+            // 定義一個Comparator接口，用於按照分數從高到低排序
+            Comparator<Player> scoreComparator = new Comparator<Player>() {
+                public int compare(Player p1, Player p2) {
+                    return p2.getScore() - p1.getScore();
+                }
+            };
+
+            // 對playerList進行排序
+            Collections.sort(playerList, scoreComparator);
+
+            for (Player p : playerList) {
+                if (p.getOnline()) {
+                    g.setFont(new Font("Monospaced", Font.BOLD, 24));
+                    String playerString = p.getName() + ":" + p.getPort() + " " + p.getScore();
+                    if(p.getPort() == player.getPort()){
+                        g.setColor(Color.YELLOW);
+                    }else{
+                        g.setColor(Color.CYAN);
+                    }
+                    g.drawString(playerString, x_pos + 20, g.getFont().getSize() + text_y * 30 );
+                    text_y += 1;
+                }
             }
 
             if (paused) {
-                g.setFont(new Font("SAN_SERIF", Font.BOLD, 30));
+                g.setFont(new Font("Monospaced", Font.BOLD, 30));
+                g.setColor(Color.YELLOW);
                 metrics = getFontMetrics(g.getFont());
                 g.drawString("遊戲暫停中...", (SCREEN_WIDTH - metrics.stringWidth("遊戲暫停中...")) / 2, SCREEN_HEIGHT / 2);
             }
@@ -287,18 +318,18 @@ public class GamePanel extends JPanel implements ActionListener, MouseListener {
 
     public void gameOver(Graphics g) {
         g.setColor(Color.RED);
-        g.setFont(new Font("SAN_SERIF", Font.BOLD, 45));
+        g.setFont(new Font("Monospaced", Font.BOLD, 45));
         FontMetrics metrics1 = getFontMetrics(g.getFont());
         g.drawString("Score: " + applesEaten,
                 (SCREEN_WIDTH - metrics1.stringWidth("Score: " + applesEaten)) / 2, (SCREEN_HEIGHT / 2) + 50);
 
         g.setColor(Color.RED);
-        g.setFont(new Font("SAN_SERIF", Font.BOLD, 75));
+        g.setFont(new Font("Monospaced", Font.BOLD, 75));
         FontMetrics metrics = getFontMetrics(g.getFont());
         g.drawString("遊戲結束", (SCREEN_WIDTH - metrics.stringWidth("遊戲結束")) / 2, SCREEN_HEIGHT / 2);
 
         g.setColor(Color.BLUE);
-        g.setFont(new Font("SAN_SERIF", Font.BOLD, 45));
+        g.setFont(new Font("Monospaced", Font.BOLD, 45));
         FontMetrics metrics2 = getFontMetrics(g.getFont());
         g.drawString("按下 Enter 重新開始遊戲...",
                 (SCREEN_WIDTH - metrics2.stringWidth("按下 Enter 重新開始遊戲....")) / 2, (SCREEN_HEIGHT / 2) + 125);
@@ -307,6 +338,8 @@ public class GamePanel extends JPanel implements ActionListener, MouseListener {
     }
 
     public void restartGame() {
+        player.setScore(0);
+
         running = false;
         started = false;
         paused = false;
@@ -327,6 +360,7 @@ public class GamePanel extends JPanel implements ActionListener, MouseListener {
         repaint();
         startGame();
     }
+
     public void pause() {
         paused = true;
         repaint();
@@ -336,25 +370,5 @@ public class GamePanel extends JPanel implements ActionListener, MouseListener {
     public void resume() {
         paused = false;
         timer.start();
-    }
-
-    @Override
-    public void mouseClicked(MouseEvent e) {
-    }
-
-    @Override
-    public void mouseEntered(MouseEvent e) {
-    }
-
-    @Override
-    public void mouseExited(MouseEvent e) {
-    }
-
-    @Override
-    public void mousePressed(MouseEvent e) {
-    }
-
-    @Override
-    public void mouseReleased(MouseEvent e) {
     }
 }
