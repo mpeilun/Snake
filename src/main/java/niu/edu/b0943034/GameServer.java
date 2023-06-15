@@ -15,15 +15,16 @@ import com.google.gson.reflect.TypeToken;
 import javax.swing.*;
 
 public class GameServer extends JFrame {
-    private JTextArea txt = new JTextArea("伺服器運行中...\n");
+
+    private SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+    private JTextArea txt = new JTextArea("[" + sdf.format(new Date()) + "] " + "伺服器運行中...\n");
     private ServerSocket serverSocket = null;
     private static List<Player> playerList = new ArrayList<>();
     private ExecutorService exec = null;
-    private SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
 
     public GameServer(int port) throws IOException, SocketException {
         txt.setEditable(false);
-        txt.append("執行於 port:" + port + "...\n");
+        txt.append("[" + sdf.format(new Date()) + "] " + "執行於 port:" + port + "...\n");
 
         setLayout(new BorderLayout());
         this.add(new JScrollPane(txt), BorderLayout.CENTER);
@@ -57,7 +58,8 @@ public class GameServer extends JFrame {
                 br.close();
                 String json = sb.toString();
                 Gson gson = new Gson();
-                playerList = gson.fromJson(json, new TypeToken<List<Player>>() {}.getType());
+                playerList = gson.fromJson(json, new TypeToken<List<Player>>() {
+                }.getType());
             }
         } catch (Exception e) {
             e.printStackTrace();
@@ -76,23 +78,34 @@ public class GameServer extends JFrame {
         }
     }
 
-    public static void sendPlayerList() {
+    public static void sendPlayerList(Socket socket) {
         try {
             Gson gson = new Gson();
             String json = gson.toJson(playerList);
             System.out.println(json);
             for (Player player : playerList) {
-                Socket socket = new Socket("localhost", player.getPort());
-                //應該把socket存起來管理 seeion
                 DataOutputStream toClient = new DataOutputStream(socket.getOutputStream());
                 toClient.writeUTF(json);
                 toClient.flush();
-                toClient.close();
-                socket.close();
             }
         } catch (Exception e) {
             e.printStackTrace();
         }
+    }
+
+    public static void updatePlayerList(Socket socket, Player player) {
+        Player existingPlayer = playerList.stream()
+                .filter(p -> p.getName().equals(player.getName()) && p.getPort() == player.getPort())
+                .findFirst()
+                .orElse(null);
+        if (existingPlayer != null) {
+            existingPlayer.setScore(player.getScore());
+            existingPlayer.setOnline(true);
+        } else {
+            playerList.add(player);
+        }
+        savePlayerList();
+        sendPlayerList(socket);
     }
 
     public static class Communication implements Runnable {
@@ -110,7 +123,8 @@ public class GameServer extends JFrame {
             this.txt = txt;
             this.sdf = sdf;
             fromClient = new DataInputStream(socket.getInputStream());
-            txt.append("[" + sdf.format(new Date()) + "]" + "[ :" +  socket.getPort() + "] 連接成功\n");
+            sendPlayerList(socket);
+            txt.append("[" + sdf.format(new Date()) + "]" + "[ :" + socket.getPort() + "] 連接成功\n");
         }
 
         @Override
@@ -119,22 +133,19 @@ public class GameServer extends JFrame {
                 while ((msg = fromClient.readUTF()) != null) {
                     Gson gson = new Gson();
                     Player player = gson.fromJson(msg, Player.class);
-                    if (playerList.contains(player)) {
-                        playerList.set(playerList.indexOf(player), player);
-                    } else {
-                        playerList.add(player);
-                    }
-                    txt.append("[" + sdf.format(new Date()) + "]" + "[" + player.getName() + ":" + socket.getPort() + "] 更新分數為"
-                            + player.getScore());
-                    savePlayerList();
-                    sendPlayerList();
+                    player.setOnline(false);
+                    updatePlayerList(socket, player);
+                    txt.append("[" + sdf.format(new Date()) + "]" + "[" + player.getName() + ":" + socket.getPort() + "] 更新分數為 "
+                            + player.getScore() + "\n");
                 }
             } catch (Exception e) {
-                txt.append("[" + sdf.format(new Date()) + "]" + "[ :" +  socket.getPort() + "] 斷開連線\n");
-                playerList.removeIf(p -> p.getPort() == socket.getPort());
-                savePlayerList();
-                sendPlayerList();
-                // e.printStackTrace();
+                txt.append("[" + sdf.format(new Date()) + "]" + "[ :" + socket.getPort() + "] 斷開連線\n");
+                Player disconnectedPlayer = playerList.stream().filter(p -> p.getPort() == socket.getPort()).findFirst().orElse(null);
+                if (disconnectedPlayer != null) {
+                    disconnectedPlayer.setOnline(false);
+                    savePlayerList();
+                    sendPlayerList(socket);
+                }
             }
         }
     }

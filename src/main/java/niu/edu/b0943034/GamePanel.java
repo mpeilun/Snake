@@ -32,10 +32,8 @@ public class GamePanel extends JPanel implements ActionListener, MouseListener {
     private final int[] y = new int[GAME_UNITS];
     private int bodyParts = 3;
     private int applesEaten = 0;
-    private String appleString;
     private String receivedMessage;
     private List<Player> playerList = new ArrayList<>();
-
     private int appleX;
     private int appleY;
     private char direction = 'R';
@@ -84,7 +82,7 @@ public class GamePanel extends JPanel implements ActionListener, MouseListener {
             try {
                 while (true) {
                     receivedMessage = fromServer.readUTF();
-                    System.out.println(receivedMessage);
+                    System.out.println("Received: " + receivedMessage);
                     topdata(receivedMessage);
                 }
             } catch (IOException e) {
@@ -105,6 +103,8 @@ public class GamePanel extends JPanel implements ActionListener, MouseListener {
         if (started && paused) {
             return;
         }
+        Player player = new Player(name, clientSocket.getLocalPort(), applesEaten, true);
+        sendMessage(player);
         newApple();
         running = true;
         timer.start();
@@ -196,19 +196,11 @@ public class GamePanel extends JPanel implements ActionListener, MouseListener {
 
     public void checkApple() {
         if ((x[0] == appleX) && (y[0] == appleY)) {
-            try {
-                bodyParts++;
-                applesEaten++;
-                appleString = String.valueOf(applesEaten);
-                Player player = new Player(name, clientSocket.getLocalPort(), applesEaten, true);
-                Gson gson = new Gson();
-                String json = gson.toJson(player);
-                toServer.writeUTF(json);
-                newApple();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-
+            bodyParts++;
+            applesEaten++;
+            Player player = new Player(name, clientSocket.getLocalPort(), applesEaten, true);
+            sendMessage(player);
+            newApple();
         }
     }
 
@@ -239,6 +231,16 @@ public class GamePanel extends JPanel implements ActionListener, MouseListener {
         playerList = gson.fromJson(receivedMessage, type);
     }
 
+    public void sendMessage(Player player) {
+        try {
+            Gson gson = new Gson();
+            String json = gson.toJson(player);
+            System.out.println("Send: " + json);
+            toServer.writeUTF(json);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
 
     public void draw(Graphics g) {
 
@@ -311,7 +313,6 @@ public class GamePanel extends JPanel implements ActionListener, MouseListener {
         gameOver = false;
         bodyParts = 3;
         applesEaten = 0;
-        appleString = "";
         receivedMessage = "";
         playerList.clear();
         direction = 'R';
