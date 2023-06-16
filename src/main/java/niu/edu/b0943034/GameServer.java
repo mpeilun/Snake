@@ -48,6 +48,7 @@ public class GameServer extends JFrame {
         }
     }
 
+    // 載入玩家清單
     public void loadPlayerList() {
         try {
             File file = new File("playerList.json");
@@ -71,6 +72,7 @@ public class GameServer extends JFrame {
         }
     }
 
+    // 儲存玩家清單
     public static void savePlayerList() {
         try {
             Gson gson = new Gson();
@@ -83,6 +85,7 @@ public class GameServer extends JFrame {
         }
     }
 
+    // 傳送玩家清單給所有連線的客戶端
     public static void sendPlayerList(Map<Integer, Socket> socketMap) {
         try {
             Gson gson = new Gson();
@@ -98,6 +101,7 @@ public class GameServer extends JFrame {
         }
     }
 
+    // 更新玩家清單
     public static void updatePlayerList(Player player) {
         Player existingPlayer = playerList.stream()
                 .filter(p -> p.getName().equals(player.getName()) && p.getPort() == player.getPort())
@@ -105,7 +109,7 @@ public class GameServer extends JFrame {
                 .orElse(null);
         if (existingPlayer != null) {
             existingPlayer.setScore(player.getScore());
-            if(existingPlayer.getBest() < player.getBest()){
+            if (existingPlayer.getBest() < player.getBest()) {
                 existingPlayer.setBest(player.getBest());
             }
             existingPlayer.setOnline(true);
@@ -115,6 +119,8 @@ public class GameServer extends JFrame {
         savePlayerList();
         sendPlayerList(socketMap);
     }
+
+    // 初始化所有玩家的線上狀態
     public void initOnlineStatue() {
         for (Player player : playerList) {
             player.setOnline(false);
@@ -122,6 +128,8 @@ public class GameServer extends JFrame {
         savePlayerList();
         sendPlayerList(socketMap);
     }
+
+    // 通訊執行緒
     public static class Communication implements Runnable {
         private Socket socket;
         private DataInputStream fromClient;

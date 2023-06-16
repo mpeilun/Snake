@@ -27,7 +27,7 @@ public class GamePanel extends JPanel implements ActionListener {
     private static final int SCREEN_HEIGHT = 500;
     private static final int UNIT_SIZE = 10;
     private static final int GAME_UNITS = (SCREEN_WIDTH * SCREEN_HEIGHT) / UNIT_SIZE;
-    private static final int DELAY = 80;
+    private static final int DELAY = 55;
 
     private final int[] x = new int[GAME_UNITS];
     private final int[] y = new int[GAME_UNITS];
@@ -53,24 +53,28 @@ public class GamePanel extends JPanel implements ActionListener {
         this.setFocusable(true);
         this.addKeyListener(new MyKeyAdapter());
 
-
-        String inputIPPort = JOptionPane.showInputDialog(null, "請輸入 IP:Port", "localhost:8888");
-        String[] ipPortArr = inputIPPort.split(":");
+        // 詢問伺服器的 IP 和 Port
+        String inputIpPort = JOptionPane.showInputDialog(null, "請輸入 IP:Port", "localhost:8888");
+        String[] ipPortArr = inputIpPort.split(":");
         String host = ipPortArr[0];
         int port = Integer.parseInt(ipPortArr[1]);
 
+        // 連線至伺服器
         client(host, port);
 
+        // 詢問玩家的遊戲 ID
         String inputName = "";
         while (inputName.isEmpty()) {
             inputName = JOptionPane.showInputDialog(null, "請輸入遊戲 ID：");
         }
 
+        // 建立玩家物件
         player = new Player(inputName, clientSocket.getLocalPort(), 0, 0, true);
 
         startGame();
     }
 
+    // 連線至伺服器
     private void client(String host, int port) {
         try {
             clientSocket = new Socket(host, port);
@@ -85,6 +89,7 @@ public class GamePanel extends JPanel implements ActionListener {
         }
     }
 
+    // 伺服器資料接收執行緒
     class ClientSocket implements Runnable {
         @Override
         public void run() {
@@ -108,6 +113,7 @@ public class GamePanel extends JPanel implements ActionListener {
         }
     }
 
+    // 遊戲開始
     public void startGame() {
         if (started && paused) {
             return;
@@ -115,9 +121,25 @@ public class GamePanel extends JPanel implements ActionListener {
         updateScore(player, 0);
         newApple();
         running = true;
+
+        // 計算螢幕中心點的坐標
+        int centerX = SCREEN_WIDTH / 2;
+        int centerY = SCREEN_HEIGHT / 2;
+
+        // 設置蛇頭的起始位置為螢幕中心
+        x[0] = centerX;
+        y[0] = centerY;
+
+        // 計算蛇身體初始位置
+        for (int i = 1; i < bodyParts; i++) {
+            x[i] = centerX - i * UNIT_SIZE;
+            y[i] = centerY;
+        }
+
         timer.start();
     }
 
+    // 產生新的蘋果
     public void newApple() {
         appleX = random.nextInt((int) (SCREEN_WIDTH / UNIT_SIZE)) * UNIT_SIZE;
         appleY = random.nextInt((int) (SCREEN_HEIGHT / UNIT_SIZE)) * UNIT_SIZE;
@@ -133,6 +155,7 @@ public class GamePanel extends JPanel implements ActionListener {
         repaint();
     }
 
+    // 鍵盤事件監聽器
     public class MyKeyAdapter extends KeyAdapter {
         @Override
         public void keyPressed(KeyEvent e) {
@@ -181,6 +204,7 @@ public class GamePanel extends JPanel implements ActionListener {
         }
     }
 
+    // 移動蛇
     public void move() {
         for (int i = bodyParts; i > 0; i--) {
             x[i] = x[i - 1];
@@ -188,20 +212,21 @@ public class GamePanel extends JPanel implements ActionListener {
         }
         switch (direction) {
             case 'U':
-                y[0] = y[0] - UNIT_SIZE;
+                y[0] -= UNIT_SIZE;
                 break;
             case 'D':
-                y[0] = y[0] + UNIT_SIZE;
+                y[0] += UNIT_SIZE;
                 break;
             case 'L':
-                x[0] = x[0] - UNIT_SIZE;
+                x[0] -= UNIT_SIZE;
                 break;
             case 'R':
-                x[0] = x[0] + UNIT_SIZE;
+                x[0] += UNIT_SIZE;
                 break;
         }
     }
 
+    // 檢查是否吃到蘋果
     public void checkApple() {
         if ((x[0] == appleX) && (y[0] == appleY)) {
             bodyParts++;
@@ -211,6 +236,7 @@ public class GamePanel extends JPanel implements ActionListener {
         }
     }
 
+    // 檢查碰撞
     public void checkCollisions() {
         for (int i = bodyParts; i > 0; i--) {
             if ((x[0] == x[i]) && (y[0] == y[i])) {
@@ -232,6 +258,7 @@ public class GamePanel extends JPanel implements ActionListener {
         draw(g);
     }
 
+    // 更新伺服器資料
     public void topdata(String receivedMessage) {
         Gson gson = new Gson();
         Type type = new TypeToken<List<Player>>() {
@@ -239,6 +266,7 @@ public class GamePanel extends JPanel implements ActionListener {
         playerList = gson.fromJson(receivedMessage, type);
     }
 
+    // 傳送玩家資料至伺服器
     public void sendMessage(Player player) {
         try {
             Gson gson = new Gson();
@@ -250,12 +278,14 @@ public class GamePanel extends JPanel implements ActionListener {
         }
     }
 
-    public  void updateScore(Player player, int score) {
+    // 更新玩家分數
+    public void updateScore(Player player, int score) {
         player.setScore(score);
         player.setBest(score);
         sendMessage(player);
     }
 
+    // 繪製遊戲畫面
     public void draw(Graphics g) {
         if (!started) {
             drawStartScreen(g);
@@ -271,34 +301,30 @@ public class GamePanel extends JPanel implements ActionListener {
         }
     }
 
+    // 繪製開始畫面
     private void drawStartScreen(Graphics g) {
         g.setColor(Color.WHITE);
         g.setFont(new Font("Monospaced", Font.BOLD, 24));
         FontMetrics metrics = getFontMetrics(g.getFont());
         String nameAndPort = "[ID] " + player.getName() + ":" + player.getPort();
-        g.drawString(nameAndPort, (SCREEN_WIDTH - metrics.stringWidth("[Enter] => 開始遊戲")) / 2,
-                SCREEN_HEIGHT / 2 - 16);
+        g.drawString(nameAndPort, (SCREEN_WIDTH - metrics.stringWidth("[Enter] => 開始遊戲")) / 2, SCREEN_HEIGHT / 2 - 16);
         g.setColor(Color.RED);
-        g.drawString("[Enter] => 開始遊戲", (SCREEN_WIDTH - metrics.stringWidth("[Enter] => 開始遊戲")) / 2,
-                SCREEN_HEIGHT / 2 + 32);
-        g.drawString("[Space] => 暫停遊戲", (SCREEN_WIDTH - metrics.stringWidth("[Space] => 暫停遊戲")) / 2,
-                (SCREEN_HEIGHT / 2) + 64);
+        g.drawString("[Enter] => 開始遊戲", (SCREEN_WIDTH - metrics.stringWidth("[Enter] => 開始遊戲")) / 2, SCREEN_HEIGHT / 2 + 32);
+        g.drawString("[Space] => 暫停遊戲", (SCREEN_WIDTH - metrics.stringWidth("[Space] => 暫停遊戲")) / 2, (SCREEN_HEIGHT / 2) + 64);
     }
 
+    // 繪製蛇
     private void drawSnake(Graphics g) {
         g.setColor(Color.RED);
         g.fillOval(appleX, appleY, UNIT_SIZE, UNIT_SIZE);
 
         for (int i = 0; i < bodyParts; i++) {
-            if (i == 0) {
-                g.setColor(Color.BLUE);
-            } else {
-                g.setColor(Color.GREEN);
-            }
+            g.setColor(i == 0 ? Color.BLUE : Color.GREEN);
             g.fillRect(x[i], y[i], UNIT_SIZE, UNIT_SIZE);
         }
     }
 
+    // 繪製玩家列表
     private void drawPlayerList(Graphics g) {
         int text_y = 0;
         int x_pos = 10;
@@ -306,7 +332,7 @@ public class GamePanel extends JPanel implements ActionListener {
         g.setColor(Color.WHITE);
         g.setFont(new Font("Monospaced", Font.BOLD, 16));
         g.drawString("↳在線玩家", x_pos, g.getFont().getSize());
-        text_y += 1;
+        text_y++;
 
         Comparator<Player> scoreComparator = (p1, p2) -> p2.getScore() - p1.getScore();
         Collections.sort(playerList, scoreComparator);
@@ -315,18 +341,15 @@ public class GamePanel extends JPanel implements ActionListener {
             if (p.getOnline()) {
                 g.setFont(new Font("Monospaced", Font.BOLD, 14));
                 String playerString = p.getName() + ":" + p.getPort() + " " + p.getScore();
-                if (p.getPort() == player.getPort()) {
-                    g.setColor(Color.YELLOW);
-                    g.drawString("•", x_pos + 8, g.getFont().getSize() + text_y * 20);
-                } else {
-                    g.setColor(Color.CYAN);
-                }
+                g.setColor(p.getPort() == player.getPort() ? Color.YELLOW : Color.CYAN);
+                g.drawString(p.getPort() == player.getPort() ? "•" : "", x_pos + 8, g.getFont().getSize() + text_y * 20);
                 g.drawString(playerString, x_pos + 20, g.getFont().getSize() + text_y * 20);
-                text_y += 1;
+                text_y++;
             }
         }
     }
 
+    // 繪製排行榜
     private void drawTopRank(Graphics g) {
         int text_y = 0;
         int x_pos = 340;
@@ -334,7 +357,7 @@ public class GamePanel extends JPanel implements ActionListener {
         g.setColor(Color.WHITE);
         g.setFont(new Font("Monospaced", Font.BOLD, 16));
         g.drawString("↳歷史排行榜(TOP3)", x_pos, g.getFont().getSize());
-        text_y += 1;
+        text_y++;
 
         Comparator<Player> scoreComparator = (p1, p2) -> p2.getBest() - p1.getBest();
         List<Player> topPlayers = playerList.stream().sorted(scoreComparator).limit(3).collect(Collectors.toList());
@@ -342,46 +365,34 @@ public class GamePanel extends JPanel implements ActionListener {
         for (Player p : topPlayers) {
             g.setFont(new Font("Monospaced", Font.BOLD, 14));
             String playerString = p.getName() + ":" + p.getPort() + " " + p.getBest();
-            if (p.getPort() == player.getPort()) {
-                g.setColor(Color.RED);
-                g.drawString("•", x_pos + 8, g.getFont().getSize() + text_y * 20);
-            } else {
-                g.setColor(Color.CYAN);
-            }
+            g.setColor(p.getPort() == player.getPort() ? Color.RED : Color.CYAN);
+            g.drawString(p.getPort() == player.getPort() ? "•" : "", x_pos + 8, g.getFont().getSize() + text_y * 20);
             g.drawString(playerString, x_pos + 20, g.getFont().getSize() + text_y * 20);
-            text_y += 1;
+            text_y++;
         }
     }
 
-
+    // 繪製暫停畫面
     private void drawPauseScreen(Graphics g) {
-        g.setFont(new Font("Monospaced", Font.BOLD, 24));
-        g.setColor(Color.YELLOW);
-        FontMetrics metrics = getFontMetrics(g.getFont());
-        g.drawString("遊戲暫停中...", (SCREEN_WIDTH - metrics.stringWidth("遊戲暫停中...")) / 2, SCREEN_HEIGHT / 2);
+        drawCenteredString(g, new Font("Monospaced", Font.BOLD, 24), Color.YELLOW, "遊戲暫停中...", SCREEN_HEIGHT / 2);
     }
 
+    // 繪製遊戲結束畫面
     public void gameOver(Graphics g) {
-        g.setColor(Color.RED);
-        g.setFont(new Font("Monospaced", Font.BOLD, 30));
-        FontMetrics metrics1 = getFontMetrics(g.getFont());
-        g.drawString("Score: " + applesEaten,
-                (SCREEN_WIDTH - metrics1.stringWidth("Score: " + applesEaten)) / 2, (SCREEN_HEIGHT / 2) + 50);
+        Font font = new Font("Monospaced", Font.BOLD, 36);
+        drawCenteredString(g, font, Color.RED, "遊戲結束", SCREEN_HEIGHT / 2);
 
-        g.setColor(Color.RED);
-        g.setFont(new Font("Monospaced", Font.BOLD, 36));
-        FontMetrics metrics = getFontMetrics(g.getFont());
-        g.drawString("遊戲結束", (SCREEN_WIDTH - metrics.stringWidth("遊戲結束")) / 2, SCREEN_HEIGHT / 2);
+        font = new Font("Monospaced", Font.BOLD, 30);
+        int y = (SCREEN_HEIGHT / 2) + 50;
+        drawCenteredString(g, font, Color.RED, "Score: " + applesEaten, y);
 
-        g.setColor(Color.BLUE);
-        g.setFont(new Font("Monospaced", Font.BOLD, 30));
-        FontMetrics metrics2 = getFontMetrics(g.getFont());
-        g.drawString("按下 Enter 重新開始遊戲...",
-                (SCREEN_WIDTH - metrics2.stringWidth("按下 Enter 重新開始遊戲....")) / 2, (SCREEN_HEIGHT / 2) + 125);
+        y += 75;
+        drawCenteredString(g, font, Color.BLUE, "按下 Enter 重新開始遊戲...", y);
 
         gameOver = true;
     }
 
+    // 重新開始遊戲
     public void restartGame() {
         updateScore(player, 0);
 
@@ -397,21 +408,30 @@ public class GamePanel extends JPanel implements ActionListener {
         timer.stop();
         random = new Random();
 
-        for (int i = 0; i < bodyParts; i++) {
-            x[i] = 0;
-            y[i] = 0;
-        }
+        Arrays.fill(x, 0);
+        Arrays.fill(y, 0);
 
         repaint();
         startGame();
     }
 
+    // 暫停遊戲
     public void pause() {
         paused = true;
         repaint();
     }
 
+    // 恢復遊戲
     public void resume() {
         paused = false;
+    }
+
+    // 繪製文字置中
+    public void drawCenteredString(Graphics g, Font font, Color color, String text, int y) {
+        g.setColor(color);
+        g.setFont(font);
+        FontMetrics metrics = g.getFontMetrics(font);
+        int x = (SCREEN_WIDTH - metrics.stringWidth(text)) / 2;
+        g.drawString(text, x, y);
     }
 }
