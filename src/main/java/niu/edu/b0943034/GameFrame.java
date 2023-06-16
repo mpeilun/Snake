@@ -5,8 +5,8 @@ import javax.swing.JFrame;
 @SuppressWarnings("serial")
 public class GameFrame extends JFrame {
 
-    public GameFrame(String host, int port) {
-        this.add(new GamePanel(host, port));
+    public GameFrame() {
+        this.add(new GamePanel());
         this.setTitle("Snake");
         this.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         this.pack();

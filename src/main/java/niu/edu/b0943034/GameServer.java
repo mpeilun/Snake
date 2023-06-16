@@ -19,10 +19,14 @@ public class GameServer extends JFrame {
     private SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
     private JTextArea txt = new JTextArea("[" + sdf.format(new Date()) + "] " + "伺服器運行中...\n");
     private ServerSocket serverSocket = null;
+    private static Map<Integer, Socket> socketMap = new HashMap<>();
     private static List<Player> playerList = new ArrayList<>();
+
     private ExecutorService exec = null;
 
     public GameServer(int port) throws IOException, SocketException {
+        setTitle("Snake Server");
+
         txt.setEditable(false);
         txt.append("[" + sdf.format(new Date()) + "] " + "執行於 port:" + port + "...\n");
 
@@ -35,11 +39,12 @@ public class GameServer extends JFrame {
         serverSocket = new ServerSocket(port);
         exec = Executors.newCachedThreadPool();
 
-        loadPlayerList(); // 載入之前的 playerList
+        loadPlayerList();
+        initOnlineStatue();
 
         while (true) {
             Socket socket = serverSocket.accept();
-            exec.execute(new Communication(socket, playerList, txt, sdf));
+            exec.execute(new Communication(socket, playerList, txt, sdf, socketMap));
         }
     }
 
@@ -78,12 +83,12 @@ public class GameServer extends JFrame {
         }
     }
 
-    public static void sendPlayerList(Socket socket) {
+    public static void sendPlayerList(Map<Integer, Socket> socketMap) {
         try {
             Gson gson = new Gson();
             String json = gson.toJson(playerList);
-            System.out.println(json);
-            for (Player player : playerList) {
+            System.out.println("Send: " + json);
+            for (Socket socket : socketMap.values()) {
                 DataOutputStream toClient = new DataOutputStream(socket.getOutputStream());
                 toClient.writeUTF(json);
                 toClient.flush();
@@ -93,21 +98,30 @@ public class GameServer extends JFrame {
         }
     }
 
-    public static void updatePlayerList(Socket socket, Player player) {
+    public static void updatePlayerList(Player player) {
         Player existingPlayer = playerList.stream()
                 .filter(p -> p.getName().equals(player.getName()) && p.getPort() == player.getPort())
                 .findFirst()
                 .orElse(null);
         if (existingPlayer != null) {
             existingPlayer.setScore(player.getScore());
+            if(existingPlayer.getBest() < player.getBest()){
+                existingPlayer.setBest(player.getBest());
+            }
             existingPlayer.setOnline(true);
         } else {
             playerList.add(player);
         }
         savePlayerList();
-        sendPlayerList(socket);
+        sendPlayerList(socketMap);
     }
-
+    public void initOnlineStatue() {
+        for (Player player : playerList) {
+            player.setOnline(false);
+        }
+        savePlayerList();
+        sendPlayerList(socketMap);
+    }
     public static class Communication implements Runnable {
         private Socket socket;
         private DataInputStream fromClient;
@@ -115,15 +129,18 @@ public class GameServer extends JFrame {
         private final List<Player> playerList;
         private final JTextArea txt;
         private final SimpleDateFormat sdf;
+        private final Map<Integer, Socket> socketMap;
 
-        public Communication(Socket socket, List<Player> playerList, JTextArea txt, SimpleDateFormat sdf)
+        public Communication(Socket socket, List<Player> playerList, JTextArea txt, SimpleDateFormat sdf, Map<Integer, Socket> socketMap)
                 throws IOException, SocketException {
             this.socket = socket;
             this.playerList = playerList;
             this.txt = txt;
             this.sdf = sdf;
+            this.socketMap = socketMap;
             fromClient = new DataInputStream(socket.getInputStream());
-            sendPlayerList(socket);
+            socketMap.put(socket.getPort(), socket);
+            sendPlayerList(socketMap);
             txt.append("[" + sdf.format(new Date()) + "]" + "[ :" + socket.getPort() + "] 連接成功\n");
         }
 
@@ -131,10 +148,11 @@ public class GameServer extends JFrame {
         public void run() {
             try {
                 while ((msg = fromClient.readUTF()) != null) {
+                    System.out.println("Received: " + msg);
                     Gson gson = new Gson();
                     Player player = gson.fromJson(msg, Player.class);
                     player.setOnline(false);
-                    updatePlayerList(socket, player);
+                    updatePlayerList(player);
                     txt.append("[" + sdf.format(new Date()) + "]" + "[" + player.getName() + ":" + socket.getPort() + "] 更新分數為 "
                             + player.getScore() + "\n");
                 }
@@ -143,8 +161,9 @@ public class GameServer extends JFrame {
                 Player disconnectedPlayer = playerList.stream().filter(p -> p.getPort() == socket.getPort()).findFirst().orElse(null);
                 if (disconnectedPlayer != null) {
                     disconnectedPlayer.setOnline(false);
+                    socketMap.remove(socket.getPort());
                     savePlayerList();
-                    sendPlayerList(socket);
+                    sendPlayerList(socketMap);
                 }
             }
         }

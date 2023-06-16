@@ -4,13 +4,15 @@ public class Player {
     private String name;
     private int port;
     private int score;
-
+    private int best;
     private boolean online;
 
-    public Player(String name, int port, int score, boolean online) {
+
+    public Player(String name, int port, int score, int best, boolean online) {
         this.name = name;
         this.port = port;
         this.score = score;
+        this.best = best;
         this.online = online;
     }
 
@@ -28,6 +30,14 @@ public class Player {
 
     public void setScore(int score) {
         this.score = score;
+    }
+
+    public int getBest() {
+        return best;
+    }
+
+    public void setBest(int best) {
+        this.best = best;
     }
 
     public boolean getOnline() {
